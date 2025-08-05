@@ -1,13 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // =================================================
-    // 1. INITIALIZATION AND STATE MANAGEMENT
-    // =================================================
-
+    // 1. INITIALIZATION
     const token = localStorage.getItem('token');
-    if (!token) {
-        window.location.href = '/login';
-        return;
-    }
+    if (!token) { window.location.href = '/login'; return; }
+
+    const myId = JSON.parse(atob(token.split('.')[1])).id;
 
     // --- DOM Elements ---
     const friendsListEl = document.getElementById('friends-list');
@@ -21,76 +17,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatFriendNameEl = document.getElementById('chat-friend-name');
     const chatFriendAvatarEl = document.getElementById('chat-friend-avatar');
     const logoutBtn = document.getElementById('logout-btn');
+    const videoCallBtn = document.getElementById('video-call-btn');
+    const voiceCallBtn = document.getElementById('voice-call-btn');
 
     // --- State Variables ---
     let activeChat = { id: null, username: null };
     let searchTimeout;
 
-    // =================================================
     // 2. SOCKET.IO CONNECTION
-    // =================================================
+    const socket = io({ auth: { token } });
 
-    const socket = io({
-        auth: { token } // Authenticate socket connection with JWT
-    });
+    socket.on('connect', () => console.log('Socket.IO se connect ho gaya! ID:', socket.id));
 
-    socket.on('connect', () => {
-        console.log('Socket.IO se connect ho gaya! ID:', socket.id);
-    });
-
-    socket.on('receivePrivateMessage', ({ content, from }) => {
-        // Agar message active chat se hai to display karo
-        if (from === activeChat.id) {
-            appendMessage(content, 'received');
+    socket.on('receivePrivateMessage', (message) => {
+        if (message.sender === activeChat.id) {
+            appendMessage(message.content, 'received', message.timestamp);
         } else {
-            // Warna friend list me notification dikhao (e.g., green dot)
-            const friendItem = document.querySelector(`.friend-item[data-id="${from}"]`);
-            if (friendItem && !friendItem.querySelector('.notification-dot')) {
-                const dot = document.createElement('span');
-                dot.className = 'notification-dot';
-                friendItem.appendChild(dot);
-            }
+            const friendItem = document.querySelector(`.friend-item[data-id="${message.sender}"] .notification-dot`);
+            if (friendItem) friendItem.style.display = 'block';
         }
     });
-    
-    // =================================================
-    // 3. API HELPER FUNCTION
-    // =================================================
 
-    // Ek helper function jo har API request ke sath token bhejega
+    // 3. API HELPER
     async function apiFetch(endpoint, options = {}) {
-        const defaultHeaders = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        };
-        const config = {
-            ...options,
-            headers: { ...defaultHeaders, ...options.headers }
-        };
+        const config = { ...options, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, ...options.headers } };
         try {
             const response = await fetch(`/api/users${endpoint}`, config);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'API request fail ho gayi');
-            }
+            if (!response.ok) throw new Error((await response.json()).message);
             return response.json();
-        } catch (error) {
-            console.error(`API Error (${endpoint}):`, error);
-            alert(error.message); // User ko error dikhayein
-        }
+        } catch (error) { console.error(`API Error:`, error); alert(error.message); }
     }
 
-    // =================================================
-    // 4. RENDERING FUNCTIONS (UI Update)
-    // =================================================
-
-    // --- Render Friends List ---
+    // 4. RENDERING FUNCTIONS
     function renderFriends(friends) {
-        friendsListEl.innerHTML = '';
-        if (friends.length === 0) {
-            friendsListEl.innerHTML = '<li class="no-friends">Dost add karne ke liye search karein.</li>';
-            return;
-        }
+        friendsListEl.innerHTML = friends.length ? '' : '<li class="no-friends">Dost add karne ke liye search karein.</li>';
         friends.forEach(friend => {
             const li = document.createElement('li');
             li.className = 'friend-item';
@@ -102,19 +62,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p class="friend-name">${friend.username}</p>
                     <p class="last-message">Click to chat...</p>
                 </div>
-            `;
+                <span class="notification-dot" style="display: none;"></span>`;
             friendsListEl.appendChild(li);
         });
     }
 
-    // --- Render Pending Friend Requests ---
     function renderPendingRequests(requests) {
         pendingRequestsListEl.innerHTML = '';
-        if(requests.length === 0) {
-            document.getElementById('requests-container').style.display = 'none';
-            return;
-        }
-        document.getElementById('requests-container').style.display = 'block';
+        document.getElementById('requests-container').style.display = requests.length ? 'block' : 'none';
         requests.forEach(req => {
             const div = document.createElement('div');
             div.className = 'request-item';
@@ -123,167 +78,119 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div>
                     <button class="btn-accept" data-id="${req._id}">Accept</button>
                     <button class="btn-reject" data-id="${req._id}">Reject</button>
-                </div>
-            `;
+                </div>`;
             pendingRequestsListEl.appendChild(div);
         });
     }
-
-    // --- Render Search Results ---
+    
     function renderSearchResults(users) {
-        searchResultsEl.innerHTML = '';
-        if (users.length === 0) {
-            searchResultsEl.innerHTML = '<div class="search-result-item">Koi user nahi mila.</div>';
-            return;
-        }
+        searchResultsEl.innerHTML = users.length ? '' : '<div class="search-result-item">Koi user nahi mila.</div>';
         users.forEach(user => {
             const div = document.createElement('div');
             div.className = 'search-result-item';
             div.innerHTML = `
                 <span>${user.username} (${user.city})</span>
-                <button class="btn-add-friend" data-id="${user._id}">Add</button>
-            `;
+                <button class="btn-add-friend" data-id="${user._id}">Add</button>`;
             searchResultsEl.appendChild(div);
         });
     }
 
-    // --- Append Message to Chat Window ---
-    function appendMessage(content, type) {
-        // "Start chat" prompt ko hatao agar mojood hai
+    function appendMessage(content, type, timestamp) {
         const prompt = messagesAreaEl.querySelector('.start-chat-prompt');
         if (prompt) prompt.remove();
-
+        const time = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message', type);
-        messageDiv.innerHTML = `<p>${content}</p><span>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+        messageDiv.innerHTML = `<p>${content}</p><span>${time}</span>`;
         messagesAreaEl.appendChild(messageDiv);
-        messagesAreaEl.scrollTop = messagesAreaEl.scrollHeight; // Automatically scroll to the latest message
+        messagesAreaEl.scrollTop = messagesAreaEl.scrollHeight;
     }
 
-
-    // =================================================
     // 5. EVENT HANDLERS
-    // =================================================
-
-    // --- Search Users ---
     searchInputEl.addEventListener('keyup', () => {
         clearTimeout(searchTimeout);
         const query = searchInputEl.value.trim();
         if (query.length > 2) {
-            searchTimeout = setTimeout(async () => {
-                const users = await apiFetch(`/search?username=${query}`);
-                renderSearchResults(users);
-            }, 300); // Debounce: request 300ms ke baad bhejein
+            searchTimeout = setTimeout(async () => renderSearchResults(await apiFetch(`/search?username=${query}`)), 300);
         } else {
             searchResultsEl.innerHTML = '';
         }
     });
 
-    // --- Event Delegation for Clicks ---
     document.body.addEventListener('click', async (e) => {
-        // Friend request bhejna
         if (e.target.matches('.btn-add-friend')) {
-            const toUserId = e.target.dataset.id;
-            await apiFetch('/friend-requests/send', {
-                method: 'POST',
-                body: JSON.stringify({ toUserId })
-            });
-            e.target.textContent = 'Sent';
-            e.target.disabled = true;
+            await apiFetch('/friend-requests/send', { method: 'POST', body: JSON.stringify({ toUserId: e.target.dataset.id }) });
+            e.target.textContent = 'Sent'; e.target.disabled = true;
         }
-
-        // Friend request accept karna
         if (e.target.matches('.btn-accept')) {
-            const requestId = e.target.dataset.id;
-            await apiFetch('/friend-requests/respond', {
-                method: 'POST',
-                body: JSON.stringify({ requestId, status: 'accepted' })
-            });
-            init(); // UI refresh karein
+            await apiFetch('/friend-requests/respond', { method: 'POST', body: JSON.stringify({ requestId: e.target.dataset.id, status: 'accepted' }) });
+            init();
         }
-
-        // Friend request reject karna
         if (e.target.matches('.btn-reject')) {
-            const requestId = e.target.dataset.id;
-            await apiFetch('/friend-requests/respond', {
-                method: 'POST',
-                body: JSON.stringify({ requestId, status: 'rejected' })
-            });
-            init(); // UI refresh karein
+            await apiFetch('/friend-requests/respond', { method: 'POST', body: JSON.stringify({ requestId: e.target.dataset.id, status: 'rejected' }) });
+            init();
         }
-        
-        // Chat open karna
         const friendItem = e.target.closest('.friend-item');
-        if (friendItem) {
-            const friendId = friendItem.dataset.id;
-            const friendUsername = friendItem.dataset.username;
-            activateChat(friendId, friendUsername);
-        }
+        if (friendItem) activateChat(friendItem.dataset.id, friendItem.dataset.username);
     });
 
-    // --- Send Message ---
     messageFormEl.addEventListener('submit', (e) => {
         e.preventDefault();
         const content = messageInputEl.value.trim();
         if (content && activeChat.id) {
-            socket.emit('privateMessage', { content, toUserId: activeChat.id });
-            appendMessage(content, 'sent');
+            const messageData = { content, toUserId: activeChat.id };
+            socket.emit('privateMessage', messageData);
+            appendMessage(content, 'sent', new Date());
             messageInputEl.value = '';
         }
     });
 
-    // --- Logout ---
-    logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('token');
-        socket.disconnect();
-        window.location.href = '/login';
-    });
+    logoutBtn.addEventListener('click', () => { localStorage.removeItem('token'); socket.disconnect(); window.location.href = '/login'; });
+    
+    videoCallBtn.addEventListener('click', () => activeChat.id ? initiateCall('video') : alert("Pehle aik chat select karein."));
+    voiceCallBtn.addEventListener('click', () => activeChat.id ? initiateCall('voice') : alert("Pehle aik chat select karein."));
 
-    // =================================================
-    // 6. HELPER & CORE FUNCTIONS
-    // =================================================
+    // 6. CORE FUNCTIONS
+    async function fetchChatHistory(friendId) {
+        messagesAreaEl.innerHTML = '';
+        const messages = await apiFetch(`/chat-history/${friendId}`);
+        messages.forEach(msg => {
+            const messageType = msg.sender === myId ? 'sent' : 'received';
+            appendMessage(msg.content, messageType, msg.createdAt);
+        });
+    }
 
-    // --- Activate a Chat ---
     function activateChat(friendId, friendUsername) {
-        // Agar pehle se yehi chat active hai to kuch na karo
         if (activeChat.id === friendId) return;
-
         activeChat = { id: friendId, username: friendUsername };
-        
-        // UI update karo
         chatAreaEl.classList.remove('hidden');
         chatFriendNameEl.textContent = friendUsername;
         chatFriendAvatarEl.src = `https://i.pravatar.cc/40?u=${friendId}`;
-        messagesAreaEl.innerHTML = '<div class="start-chat-prompt"><p>Loading previous messages...</p></div>';
         messageInputEl.disabled = false;
         messageFormEl.querySelector('button').disabled = false;
         
-        // Remove notification dot if it exists
-        const friendItem = document.querySelector(`.friend-item[data-id="${friendId}"] .notification-dot`);
-        if(friendItem) friendItem.remove();
+        const dot = document.querySelector(`.friend-item[data-id="${friendId}"] .notification-dot`);
+        if (dot) dot.style.display = 'none';
 
-        // Highlight the active friend in the list
         document.querySelectorAll('.friend-item').forEach(item => item.classList.remove('active'));
         document.querySelector(`.friend-item[data-id="${friendId}"]`).classList.add('active');
         
-        // Yahan purane messages fetch karne ka logic ayega
-        // fetchChatHistory(friendId);
+        fetchChatHistory(friendId);
     }
     
-    // --- Initial Load Function ---
+    async function initiateCall(callType) {
+        alert(`Starting ${callType} call with ${activeChat.username}. Feature abhi ban raha hai.`);
+    }
+
     async function init() {
         try {
             const [friends, requests] = await Promise.all([
-                apiFetch('/friends'),
-                apiFetch('/friend-requests/pending')
+                apiFetch('/friends'), apiFetch('/friend-requests/pending')
             ]);
             renderFriends(friends);
             renderPendingRequests(requests);
-        } catch (error) {
-            console.error('Initialization failed:', error);
-        }
+        } catch (error) { console.error('Initialization failed:', error); }
     }
 
-    // --- Start the application ---
     init();
 });
