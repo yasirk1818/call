@@ -1,15 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { searchUsers, sendFriendRequest, respondToRequest, getFriends, getPendingRequests } = require('../controllers/userController');
+const { 
+    searchUsers, 
+    sendFriendRequest, 
+    respondToRequest, 
+    getFriends, 
+    getPendingRequests,
+    getChatHistory // getChatHistory ko import karein
+} = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 
-// Yeh sab routes protected hain, yani sirf logged-in user hi inko access kar sakta hai
-router.use(protect);
+router.use(protect); // Sab routes par middleware lagayein
 
 router.get('/search', searchUsers);
 router.get('/friends', getFriends);
 router.get('/friend-requests/pending', getPendingRequests);
 router.post('/friend-requests/send', sendFriendRequest);
 router.post('/friend-requests/respond', respondToRequest);
+router.get('/chat-history/:friendId', getChatHistory); // Naya route
 
 module.exports = router;
