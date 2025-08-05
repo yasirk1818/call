@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser } = require('../controllers/authController');
+// loginUser ko import karein
+const { registerUser, loginUser } = require('../controllers/authController');
 
-// Route: POST /api/auth/register
+// Register route (pehle se mojood)
 router.post('/register', registerUser);
+
+// Naya Login route
+router.post('/login', loginUser);
 
 module.exports = router;
