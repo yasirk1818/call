@@ -5,7 +5,7 @@ const path = require('path');
 
 // Routes import karein
 const authRoutes = require('./routes/authRoutes');
-
+const { protect } = require('./middleware/authMiddleware'); // Middleware ko import karein
 const app = express();
 
 // Middlewares
