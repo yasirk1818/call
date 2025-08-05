@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectMe Chat</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <header>
+            <h1>Welcome, <%= user.username %>!</h1>
+            <button id="logout-btn">Logout</button>
+        </header>
+        <main>
+            <!-- Yahan chat interface ayega -->
+            <p>Chat interface yahan banaya jayega.</p>
+        </main>
+    </div>
+
+    <script>
+        // Logout functionality
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            localStorage.removeItem('token'); // Token remove karein
+            window.location.href = '/login'; // Login page par bhej dein
+        });
+    </script>
+</body>
+</html>
