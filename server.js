@@ -1,44 +1,45 @@
+require('dotenv').config(); // .env file ko load karne ke liye
 const express = require('express');
-const http = require('http');
-const { Server } = require("socket.io");
-// ... baqi dependencies
+const mongoose = require('mongoose');
+const path = require('path');
+
+// Routes import karein
+const authRoutes = require('./routes/authRoutes');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
 
-app.use(express.json()); // Body parser
+// Middlewares
+app.use(express.json()); // JSON data parse karne ke liye
+app.use(express.urlencoded({ extended: true })); // Form data parse karne ke liye
 
-// EJS setup
+// View Engine Setup
 app.set('view engine', 'ejs');
-app.use(express.static('public'));
+app.set('views', path.join(__dirname, 'views'));
 
-// Routes
-// const authRoutes = require('./routes/authRoutes');
-// app.use('/api/auth', authRoutes);
+// Static files (CSS, Frontend JS) ke liye folder
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-    // Check if user is logged in, then render index.ejs
-    res.render('login'); // Start with login page
+
+// Database Connection
+mongoose.connect(process.env.DATABASE_URL, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => console.log('MongoDB connected...'))
+  .catch(err => console.log(err));
+
+
+// API Routes ko istemaal karein
+app.use('/api/auth', authRoutes);
+
+// Page Routes
+app.get('/register', (req, res) => {
+    res.render('register', { title: 'Register' });
 });
 
-// Socket.IO Connection
-io.on('connection', (socket) => {
-    console.log('a user connected:', socket.id);
-
-    // Apne tamam events yahan handle karein
-    socket.on('sendMessage', (data) => {
-        // Message ko database me save karein
-        // Receiver ko message forward karein
-        io.to(receiverSocketId).emit('receiveMessage', data);
-    });
-
-    socket.on('disconnect', () => {
-        console.log('user disconnected');
-    });
+app.get('/login', (req, res) => {
+    res.render('login', { title: 'Login' });
 });
+
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server chal raha hai port ${PORT} par`));
