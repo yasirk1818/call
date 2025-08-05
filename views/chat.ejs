@@ -5,24 +5,119 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ConnectMe Chat</title>
     <link rel="stylesheet" href="/css/style.css">
+    <!-- Font Awesome icons ke liye -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
-    <div class="chat-container">
-        <header>
-            <h1>Welcome, <%= user.username %>!</h1>
-            <button id="logout-btn">Logout</button>
-        </header>
-        <main>
-            <!-- Yahan chat interface ayega -->
-            <p>Chat interface yahan banaya jayega.</p>
-        </main>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3>Chats</h3>
+                <button id="logout-btn" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+            <div class="search-bar">
+                <input type="text" placeholder="Search or start new chat">
+            </div>
+            <ul class="friends-list">
+                <!-- Yahan friends ki list dynamically load hogi -->
+                <li class="friend-item active">
+                    <img src="https://via.placeholder.com/40" alt="avatar">
+                    <div class="friend-info">
+                        <p class="friend-name">Friend 1</p>
+                        <p class="last-message">Hello there...</p>
+                    </div>
+                </li>
+                 <li class="friend-item">
+                    <img src="https://via.placeholder.com/40" alt="avatar">
+                    <div class="friend-info">
+                        <p class="friend-name">Friend 2</p>
+                        <p class="last-message">Typing...</p>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="friend-details">
+                    <img src="https://via.placeholder.com/40" alt="avatar">
+                    <p class="friend-name">Friend 1</p>
+                </div>
+                <div class="chat-icons">
+                    <i class="fas fa-video"></i>
+                    <i class="fas fa-phone"></i>
+                </div>
+            </div>
+            <div class="messages-area">
+                <!-- Yahan messages display honge -->
+                <div class="message received">
+                    <p>Hey, how are you?</p>
+                    <span>10:30 AM</span>
+                </div>
+                <div class="message sent">
+                    <p>I am fine, thanks! What about you?</p>
+                    <span>10:31 AM</span>
+                </div>
+            </div>
+            <form class="message-input-area" id="message-form">
+                <i class="fas fa-smile"></i>
+                <input type="text" id="message-input" placeholder="Type a message">
+                <button type="submit"><i class="fas fa-paper-plane"></i></button>
+            </form>
+        </div>
     </div>
 
+    <!-- Socket.IO client library -->
+    <script src="/socket.io/socket.io.js"></script>
     <script>
+        // Frontend JS
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+        } else {
+            // Socket.IO se connect karein
+            const socket = io();
+
+            const messageForm = document.getElementById('message-form');
+            const messageInput = document.getElementById('message-input');
+            const messagesArea = document.querySelector('.messages-area');
+
+            // Message bhejne ka logic
+            messageForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const message = messageInput.value;
+                if (message.trim()) {
+                    // 'sendMessage' event server ko bhejein
+                    socket.emit('sendMessage', { message });
+                    
+                    // Apna message foran UI me add karein
+                    appendMessage(message, 'sent');
+                    messageInput.value = '';
+                }
+            });
+
+            // Server se message receive karne ka logic
+            socket.on('receiveMessage', (data) => {
+                // Doosre user ka message UI me add karein
+                appendMessage(data.message, 'received');
+            });
+
+            function appendMessage(message, type) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', type);
+                messageDiv.innerHTML = `<p>${message}</p><span>${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                messagesArea.appendChild(messageDiv);
+                messagesArea.scrollTop = messagesArea.scrollHeight; // Scroll to bottom
+            }
+        }
+        
         // Logout functionality
         document.getElementById('logout-btn').addEventListener('click', () => {
-            localStorage.removeItem('token'); // Token remove karein
-            window.location.href = '/login'; // Login page par bhej dein
+            localStorage.removeItem('token');
+
+            window.location.href = '/login';
         });
     </script>
 </body>
